@@ -5,6 +5,7 @@ import sys
 import glob as glob_module
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from openai import OpenAI
 
 client = OpenAI(
@@ -110,6 +111,15 @@ def plan(task):
 
 available_functions = {"read": read, "write": write, "edit": edit, "glob": glob, "grep": grep, "bash": bash, "plan": plan}
 
+def parse_tool_arguments(raw_arguments: str) -> dict[str, Any]:
+    if not raw_arguments:
+        return {}
+    try:
+        parsed = json.loads(raw_arguments)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError as error:
+        return {"_argument_error": f"Invalid JSON arguments: {error}"}
+
 def load_memory():
     if not os.path.exists(MEMORY_FILE):
         return ""
@@ -183,12 +193,19 @@ def run_agent_step(messages, tools, max_iterations=5):
         if not message.tool_calls:
             return message.content, messages
         for tool_call in message.tool_calls:
-            function_name = tool_call.function.name
-            function_args = json.loads(tool_call.function.arguments)
+            function_payload = getattr(tool_call, "function", None)
+            if function_payload is None:
+                continue
+            function_name = str(getattr(function_payload, "name", ""))
+            raw_arguments = str(getattr(function_payload, "arguments", ""))
+            function_args = parse_tool_arguments(raw_arguments)
             print(f"[Tool] {function_name}({function_args})")
-            if function_name == "plan":
+            function_impl = available_functions.get(function_name)
+            if "_argument_error" in function_args:
+                function_response = f"Error: {function_args['_argument_error']}"
+            elif function_name == "plan" and function_impl is not None:
                 plan_mode = True
-                function_response = available_functions[function_name](**function_args)
+                function_response = function_impl(**function_args)
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": function_response})
                 if current_plan:
                     results = []
@@ -201,10 +218,10 @@ def run_agent_step(messages, tools, max_iterations=5):
                     plan_mode = False
                     current_plan = []
                     return "\n".join(results), messages
-            elif function_name in available_functions:
-                function_response = available_functions[function_name](**function_args)
+            elif function_impl is not None:
+                function_response = function_impl(**function_args)
             else:
-                function_response = f"Tool {function_name} not implemented"
+                function_response = f"Error: Unknown tool '{function_name}'"
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": function_response})
     return "Max iterations reached", messages
 
