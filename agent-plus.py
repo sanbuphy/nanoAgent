@@ -118,7 +118,12 @@ def create_plan(task):
     )
     try:
         plan_data = json.loads(response.choices[0].message.content)
-        steps = plan_data.get("steps", [task])
+        if isinstance(plan_data, dict):
+            steps = plan_data.get("steps", [task])
+        elif isinstance(plan_data, list):
+            steps = plan_data
+        else:
+            steps = [task]
         print(f"[Plan] {len(steps)} steps created")
         for i, step in enumerate(steps, 1):
             print(f"  {i}. {step}")
@@ -179,4 +184,3 @@ if __name__ == "__main__":
         sys.exit(1)
     task = " ".join(sys.argv[1:])
     run_agent_plus(task, use_plan=use_plan)
-
