@@ -326,6 +326,33 @@ class AgentClaudeCodeRegressionTests(unittest.TestCase):
         self.assertEqual(len(tool_messages), 1)
         self.assertIn("Invalid JSON arguments", tool_messages[0]["content"])
 
+    def test_run_agent_claudecode_executes_plan_steps(self):
+        responses = [
+            make_response(
+                SimpleNamespace(content='{"steps": ["step one", "step two"]}')
+            ),
+            make_response(SimpleNamespace(content="done 1", tool_calls=[])),
+            make_response(SimpleNamespace(content="done 2", tool_calls=[])),
+        ]
+
+        def fake_create(*, model, messages, tools=None, response_format=None):
+            return responses.pop(0)
+
+        setattr(
+            self.agent,
+            "client",
+            SimpleNamespace(
+                chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))
+            ),
+        )
+        setattr(self.agent, "save_memory", lambda task, result: None)
+
+        result = self.agent.run_agent_claudecode("test plan", use_plan=True)
+
+        self.assertEqual(result, "done 1\ndone 2")
+        self.assertEqual(self.agent.current_plan, [])
+        self.assertFalse(self.agent.plan_mode)
+
 
 if __name__ == "__main__":
     unittest.main()
