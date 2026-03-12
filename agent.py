@@ -1,6 +1,7 @@
 import os
 import json
 import subprocess
+from typing import Any
 from openai import OpenAI
 
 client = OpenAI(
@@ -70,6 +71,16 @@ def write_file(path, content):
 functions = {"execute_bash": execute_bash, "read_file": read_file, "write_file": write_file}
 
 
+def parse_tool_arguments(raw_arguments: str) -> dict[str, Any]:
+    if not raw_arguments:
+        return {}
+    try:
+        parsed = json.loads(raw_arguments)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError as error:
+        return {"_argument_error": f"Invalid JSON arguments: {error}"}
+
+
 def run_agent(user_message, max_iterations=5):
     messages = [
         {"role": "system", "content": "You are a helpful assistant. Be concise."},
@@ -86,11 +97,16 @@ def run_agent(user_message, max_iterations=5):
         if not message.tool_calls:
             return message.content
         for tool_call in message.tool_calls:
-            name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
+            function_payload = getattr(tool_call, "function", None)
+            if function_payload is None:
+                continue
+            name = str(getattr(function_payload, "name", ""))
+            args = parse_tool_arguments(str(getattr(function_payload, "arguments", "")))
             print(f"[Tool] {name}({args})")
             if name not in functions:
                 result = f"Error: Unknown tool '{name}'"
+            elif "_argument_error" in args:
+                result = f"Error: {args['_argument_error']}"
             else:
                 result = functions[name](**args)
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})

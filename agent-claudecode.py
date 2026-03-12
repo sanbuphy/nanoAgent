@@ -99,7 +99,10 @@ def plan(task):
         response_format={"type": "json_object"}
     )
     try:
-        plan_data = json.loads(response.choices[0].message.content)
+        plan_content = response.choices[0].message.content
+        if not isinstance(plan_content, str):
+            return "Error: Failed to create plan"
+        plan_data = json.loads(plan_content)
         steps = plan_data.get("steps", [task])
         current_plan = steps
         print(f"[Plan] Created {len(steps)} steps")
@@ -204,19 +207,21 @@ def run_agent_step(messages, tools, max_iterations=5):
             if "_argument_error" in function_args:
                 function_response = f"Error: {function_args['_argument_error']}"
             elif function_name == "plan" and function_impl is not None:
-                plan_mode = True
                 function_response = function_impl(**function_args)
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": function_response})
                 if current_plan:
                     results = []
-                    for i, step in enumerate(current_plan, 1):
-                        print(f"\n[Step {i}/{len(current_plan)}] {step}")
-                        messages.append({"role": "user", "content": step})
-                        result, messages = run_agent_step(messages, [t for t in tools if t["function"]["name"] != "plan"])
-                        results.append(result)
-                        print(f"\n{result}")
-                    plan_mode = False
-                    current_plan = []
+                    plan_mode = True
+                    try:
+                        for i, step in enumerate(current_plan, 1):
+                            print(f"\n[Step {i}/{len(current_plan)}] {step}")
+                            messages.append({"role": "user", "content": step})
+                            result, messages = run_agent_step(messages, [t for t in tools if t["function"]["name"] != "plan"])
+                            results.append(result)
+                            print(f"\n{result}")
+                    finally:
+                        plan_mode = False
+                        current_plan = []
                     return "\n".join(results), messages
             elif function_impl is not None:
                 function_response = function_impl(**function_args)
@@ -246,18 +251,24 @@ def run_agent_claudecode(task, use_plan=False):
         context_parts.append(f"\n# Previous Context\n{memory}")
     messages = [{"role": "system", "content": "\n".join(context_parts)}]
     if use_plan:
-        plan_mode = True
-        plan(task)
-        results = []
-        for i, step in enumerate(current_plan, 1):
-            print(f"\n[Step {i}/{len(current_plan)}] {step}")
-            messages.append({"role": "user", "content": step})
-            result, messages = run_agent_step(messages, [t for t in all_tools if t["function"]["name"] != "plan"])
-            results.append(result)
-            print(f"\n{result}")
-        plan_mode = False
-        current_plan = []
-        final_result = "\n".join(results)
+        plan_result = plan(task)
+        if current_plan:
+            results = []
+            plan_mode = True
+            try:
+                for i, step in enumerate(current_plan, 1):
+                    print(f"\n[Step {i}/{len(current_plan)}] {step}")
+                    messages.append({"role": "user", "content": step})
+                    result, messages = run_agent_step(messages, [t for t in all_tools if t["function"]["name"] != "plan"])
+                    results.append(result)
+                    print(f"\n{result}")
+            finally:
+                plan_mode = False
+                current_plan = []
+            final_result = "\n".join(results)
+        else:
+            final_result = plan_result
+            print(f"\n{final_result}")
     else:
         messages.append({"role": "user", "content": task})
         final_result, messages = run_agent_step(messages, all_tools)
