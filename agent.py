@@ -4,8 +4,7 @@ import subprocess
 from openai import OpenAI
 
 client = OpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-    base_url=os.environ.get("OPENAI_BASE_URL")
+    api_key=os.environ.get("OPENAI_API_KEY"), base_url=os.environ.get("OPENAI_BASE_URL")
 )
 
 tools = [
@@ -52,8 +51,13 @@ tools = [
 
 
 def execute_bash(command):
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
-    return result.stdout + result.stderr
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=30
+        )
+        return result.stdout + result.stderr
+    except subprocess.TimeoutExpired:
+        return "Error: Command timed out after 30 seconds"
 
 
 def read_file(path):
@@ -67,7 +71,11 @@ def write_file(path, content):
     return f"Wrote to {path}"
 
 
-functions = {"execute_bash": execute_bash, "read_file": read_file, "write_file": write_file}
+functions = {
+    "execute_bash": execute_bash,
+    "read_file": read_file,
+    "write_file": write_file,
+}
 
 
 def run_agent(user_message, max_iterations=5):
@@ -93,11 +101,14 @@ def run_agent(user_message, max_iterations=5):
                 result = f"Error: Unknown tool '{name}'"
             else:
                 result = functions[name](**args)
-            messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
+            messages.append(
+                {"role": "tool", "tool_call_id": tool_call.id, "content": result}
+            )
     return "Max iterations reached"
 
 
 if __name__ == "__main__":
     import sys
+
     task = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Hello"
     print(run_agent(task))
