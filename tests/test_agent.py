@@ -1,4 +1,5 @@
 import importlib.util
+import subprocess
 import sys
 import types
 import unittest
@@ -46,6 +47,33 @@ def make_response(message):
 class AgentRegressionTests(unittest.TestCase):
     def setUp(self):
         self.agent = load_agent_module("agent.py", "nanoagent_agent")
+
+    def test_execute_bash_passes_timeout(self):
+        captured: dict[str, object] = {}
+
+        def fake_run(command, **kwargs):
+            captured["command"] = command
+            captured.update(kwargs)
+            return SimpleNamespace(stdout="ok", stderr="")
+
+        self.agent.subprocess.run = fake_run
+
+        result = self.agent.execute_bash("echo ok")
+
+        self.assertEqual(result, "ok")
+        self.assertEqual(captured["command"], "echo ok")
+        self.assertEqual(captured["timeout"], 30)
+        self.assertTrue(captured["shell"])
+
+    def test_execute_bash_returns_timeout_error(self):
+        def fake_run(*args, **kwargs):
+            raise subprocess.TimeoutExpired(cmd="sleep 31", timeout=30)
+
+        self.agent.subprocess.run = fake_run
+
+        result = self.agent.execute_bash("sleep 31")
+
+        self.assertEqual(result, "Error: Command timed out after 30 seconds")
 
     def test_parse_tool_arguments_reports_invalid_json(self):
         parsed = self.agent.parse_tool_arguments('{"command":')
