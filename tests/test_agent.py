@@ -1,4 +1,5 @@
 import importlib.util
+import subprocess
 import sys
 import types
 import unittest
@@ -325,6 +326,30 @@ class AgentClaudeCodeRegressionTests(unittest.TestCase):
         ]
         self.assertEqual(len(tool_messages), 1)
         self.assertIn("Invalid JSON arguments", tool_messages[0]["content"])
+
+    def test_grep_returns_no_matches_on_exit_code_one(self):
+        def fake_run(args, **kwargs):
+            self.assertEqual(args, ["grep", "-r", "needle", "."])
+            self.assertEqual(kwargs["timeout"], 30)
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+
+        self.agent.subprocess.run = fake_run
+
+        result = self.agent.grep("needle")
+
+        self.assertEqual(result, "No matches found")
+
+    def test_grep_surfaces_real_grep_errors(self):
+        def fake_run(args, **kwargs):
+            return SimpleNamespace(
+                returncode=2, stdout="", stderr="grep: invalid regex"
+            )
+
+        self.agent.subprocess.run = fake_run
+
+        result = self.agent.grep("(")
+
+        self.assertEqual(result, "grep: invalid regex")
 
 
 if __name__ == "__main__":
