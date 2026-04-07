@@ -8,6 +8,8 @@
 
 这是一个使用 OpenAI 函数调用的最小化 AI 智能体实现。智能体可以执行 bash 命令、读取文件和写入文件。
 
+如果你想了解更多，比如学习什么是 MCP、如何更现代地获取工具，推荐看：https://github.com/sanbuphy/nanoMCP
+
 ## 安装
 
 ```bash

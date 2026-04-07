@@ -8,6 +8,8 @@ The simplest way to build an agent that can interact with your system.
 
 A minimal implementation of an AI agent using OpenAI's function calling. The agent can execute bash commands, read files, and write files.
 
+If you want to learn more (e.g. what MCP is, and how to fetch tools in a more modern way), see: https://github.com/sanbuphy/nanoMCP
+
 ## install
 
 ```bash
